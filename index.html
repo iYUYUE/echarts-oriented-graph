@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<head>
+    <meta charset="utf-8">
+    <title>有向图</title>
+</head>
+
+<body>
+    <div id="main" style="height:400px"></div>
+    <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
+    <script src="./echarts.js"></script>
+    <script type="text/javascript">
+
+        const NODES = [
+            {name: 'a', value: 'A'},
+            {name: 'b', value: 'B'},
+            {name: 'c', value: 'C'},
+            {name: 'd', value: 'D'},
+            {name: 'e', value: 'E'},
+            {name: 'f', value: 'F'},
+            {name: 'g', value: 'G'},
+            {name: 'h', value: 'H'},
+            {name: 'i', value: 'I'},
+            {name: 'j', value: 'J'},
+            {name: 'k', value: 'K'},
+            {name: 'l', value: 'L'},
+            {name: 'm', value: 'M'},
+            {name: 'n', value: 'N'},
+            {name: 'o', value: 'O'},
+            {name: 'p', value: 'P'},
+            {name: 'q', value: 'Q'},
+            {name: 'r', value: 'R'},
+            {name: 's', value: 'S'},
+            {name: 't', value: 'T'},
+            {name: 'u', value: 'U'},
+            {name: 'v', value: 'V'},
+            {name: 'w', value: 'W'},
+            {name: 'x', value: 'X'},
+            {name: 'y', value: 'Y'},
+            {name: 'z', value: 'Z'},
+            {name: 'end', value: 'END'},
+        ]
+        const LINES = [
+            ['a', 'b'], ['b', 'c'], ['c', 'end'], ['a', 'd'], ['d', 'e'], ['e', 'f'], ['f', 'g'], ['g', 'end'], ['f', 'h'],
+            ['h', 'end'], ['d', 'i'], ['i', 'j'], ['j', 'k'], ['k', 'end'], ['i', 'l'], ['l', 'm'], ['m', 'end'],
+            ['d', 'n'], ['n', 'o'], ['o', 'p'], ['p', 'q'], ['q', 'r'], ['r', 'end'], ['p', 's'], ['s', 't'],
+            ['t', 'end'], ['a', 'u'], ['u', 'v'], ['v', 'w'], ['w', 'x'], ['x', 'end'], ['v', 'y'], ['y', 'z'], ['z', 'end']
+        ];
+        const START_NODE = 'a';
+        const END_NODE = 'end';
+
+        function getNodeKey(node) {
+            return node.name;
+        }
+
+        function getNodeValue(node) {
+            return node.value;
+        }
+
+        const NODE_KEY_MAP = {};
+        for (let node of NODES) {
+            NODE_KEY_MAP[getNodeKey(node)] = node;
+        }
+
+        // 横向
+        function getNodeDepth(nodeKey, nodeGraph, nodeDepth) {
+            if (nodeKey === START_NODE) {
+                nodeDepth[nodeKey] = 1;
+                return 1;
+            }
+            if (nodeDepth[nodeKey]) {
+                return nodeDepth[nodeKey];
+            }
+            let maxDepth = 0;
+            for (let nd of NODES) {
+                const ndKey = getNodeKey(nd);
+                if (ndKey === nodeKey) {
+                    continue;
+                }
+                if (nodeGraph[ndKey].includes(nodeKey)) {
+                    let depth = getNodeDepth(ndKey, nodeGraph, nodeDepth);
+                    maxDepth = depth > maxDepth ? depth : maxDepth;
+                }
+            }
+            nodeDepth[nodeKey] = maxDepth + 1;
+            return nodeDepth[nodeKey];
+        }
+
+        // 纵向
+        function getNodeHeight(nodeKey, nodeGraph, nodeHeight) {
+            if (nodeKey === END_NODE) {
+                nodeHeight[nodeKey] = 1;
+                return 1;
+            }
+            if (nodeHeight[nodeKey]) {
+                return nodeHeight[nodeKey];
+            }
+            let height = 0;
+            for (let nd of NODES) {
+                const ndKey = getNodeKey(nd);
+                if (ndKey === nodeKey) {
+                    continue;
+                }
+                if (nodeGraph[nodeKey].includes(ndKey)) {
+                    height += getNodeHeight(ndKey, nodeGraph, nodeHeight);
+                }
+            }
+            nodeHeight[nodeKey] = height;
+            return nodeHeight[nodeKey];
+        }
+
+        function normalizeNodeHeight(nodeKey, nodeGraph, nodeHeight, realHeight) {
+            if (nodeKey === START_NODE || nodeKey === END_NODE) {
+                realHeight[nodeKey] = 0;
+            }
+            let childs = nodeGraph[nodeKey];
+            let height = nodeHeight[nodeKey];
+            let childStartHeight = realHeight[nodeKey] - (height - 1) / 2 - 1;
+            for (let ndKey of childs) {
+                if (ndKey === END_NODE) {
+                    continue;
+                }
+                let startHeight = childStartHeight + 1;
+                let endHeight = startHeight + (nodeHeight[ndKey] - 1);
+                realHeight[ndKey] = (startHeight + endHeight) / 2;
+                childStartHeight = endHeight;
+            }
+            for (let ndKey of childs) {
+                normalizeNodeHeight(ndKey, nodeGraph, nodeHeight, realHeight);
+            }
+        }
+
+        function updateDepthAndCache(nodeKey, nodeGraph, realDepth, cached, len) {
+            let childs = nodeGraph[nodeKey];
+            for (let ndKey of childs) {
+                // 这里需要继续判断
+                if (ndKey === END_NODE) {
+                    continue;
+                }
+                realDepth[ndKey] += len;
+                cached[ndKey].cnt -= len;
+                updateDepthAndCache(ndKey, nodeGraph, realDepth, cached, len);
+            }
+        }
+
+        function getDepthCache(nodeKey, nodeGraph, realDepth, cached) {
+            if (cached[nodeKey]) {
+                return cached[nodeKey];
+            }
+            if (nodeKey === END_NODE) {
+                cached[nodeKey] = {
+                    line: 0,
+                    cnt: 0,
+                };
+                return cached[nodeKey];
+            }
+            let childs = nodeGraph[nodeKey];
+            let current = {
+                line: 0,
+                cnt: Number.MAX_SAFE_INTEGER,
+            };
+            for (let ndKey of childs) {
+                let d = getDepthCache(ndKey, nodeGraph, realDepth, cached);
+                if (d.cnt < current.cnt) {
+                    current = Object.assign({}, d);
+                }
+            }
+            if (childs.length === 1 && childs[0] !== END_NODE) {
+                current.line += 1;
+            }
+            if (childs.includes(END_NODE)) {
+                current.cnt += realDepth[END_NODE] - realDepth[nodeKey] - 1;
+            }
+            cached[nodeKey] = current;
+            return current;
+        }
+
+        function normalizeNodeDepth(nodeGraph, realDepth) {
+            let cached = {};
+            getDepthCache(START_NODE, nodeGraph, realDepth, cached);
+            for (let nodeKey of Object.keys(NODE_KEY_MAP)) {
+                let cache = cached[nodeKey];
+                if (nodeGraph[nodeKey].length > 1) {
+                    continue;
+                } else {
+                    let len = cache.cnt / cache.line;
+                    updateDepthAndCache(nodeKey, nodeGraph, realDepth, cached, len);
+                }
+            }
+        }
+
+        function buildNodeMap () {
+            let nodeGraph = {};
+            let nodeDepth = {};
+            let nodeHeight = {};
+            let realHeight = {};
+            let realDepth = {};
+            for (let nodeKey of Object.keys(NODE_KEY_MAP)) {
+                nodeGraph[nodeKey] = [];
+            }
+            for (let line of LINES) {
+                nodeGraph[line[0]].push(line[1]);
+            }
+            for (let key of Object.keys(NODE_KEY_MAP)) {
+                getNodeDepth(key, nodeGraph, nodeDepth);
+                getNodeHeight(key, nodeGraph, nodeHeight);
+            }
+            normalizeNodeHeight(START_NODE ,nodeGraph, nodeHeight, realHeight);
+            realDepth = Object.assign({}, nodeDepth);
+            normalizeNodeDepth(nodeGraph, realDepth);
+            let nodes = [];
+            let links = [];
+            for (let nd of NODES) {
+                const key = getNodeKey(nd);
+                let node = {
+                    name: key,
+                    x: realDepth[key] * 60,
+                    y: realHeight[key] * 60,
+                    value: getNodeValue(nd),
+                };
+                nodes.push(node);
+            }
+            for (let i = 0; i < LINES.length; i++) {
+                let line = {
+                    'source': LINES[i][0],
+                    'target': LINES[i][1],
+                    'value': 1,
+                };
+                links.push(line);
+            }
+            return {
+                links: links,
+                data: nodes
+            };
+        }
+
+        let myChart = echarts.init(document.getElementById('main'));
+
+        function draw() {
+            let graph = buildNodeMap();
+            drawGraph(graph);
+        }
+
+        function drawGraph(graph) {
+            var option = {
+                series: [
+                    {
+                        type: 'graph',
+                        layout: 'none',
+                        symbolSize: 30,
+                        edgeSymbol: ['none', 'arrow'],
+                        data: graph.data,
+                        links: graph.links,
+                        roam: true,
+                        label: {
+                            normal: {
+                                show: true,
+                                formatter: function (e) {
+                                    return e['data']['value'];
+                                }
+                            }
+                        },
+                        lineStyle: {
+                            color: 'target',
+                        },
+                        edgeLabel: {
+                            normal: {
+                                show: false,
+                            }
+                        },
+                        tooltip: {
+                            normal: {
+                                show: false,
+                            }
+                        }
+                    }
+                ]
+            };
+            myChart.setOption(option);
+        }
+
+        draw();
+
+        myChart.on('click', function(params) {
+            console.log(params);
+        })
+
+    </script>
+</body>
