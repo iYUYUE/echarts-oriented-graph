@@ -12,41 +12,25 @@
     <script type="text/javascript">
 
         const NODES = [
-            {name: 'a', value: 'A'},
-            {name: 'b', value: 'B'},
-            {name: 'c', value: 'C'},
-            {name: 'd', value: 'D'},
-            {name: 'e', value: 'E'},
-            {name: 'f', value: 'F'},
-            {name: 'g', value: 'G'},
-            {name: 'h', value: 'H'},
-            {name: 'i', value: 'I'},
-            {name: 'j', value: 'J'},
-            {name: 'k', value: 'K'},
-            {name: 'l', value: 'L'},
-            {name: 'm', value: 'M'},
-            {name: 'n', value: 'N'},
-            {name: 'o', value: 'O'},
-            {name: 'p', value: 'P'},
-            {name: 'q', value: 'Q'},
-            {name: 'r', value: 'R'},
-            {name: 's', value: 'S'},
-            {name: 't', value: 'T'},
-            {name: 'u', value: 'U'},
-            {name: 'v', value: 'V'},
-            {name: 'w', value: 'W'},
-            {name: 'x', value: 'X'},
-            {name: 'y', value: 'Y'},
-            {name: 'z', value: 'Z'},
-            {name: 'end', value: 'END'},
+            {name: 'start', value: 'Case Was Received'},
+            {name: 's1', value: 'Request for Additional Evidence Was Mailed'},
+            {name: 's2', value: 'Response To USCIS\' Request For Evidence Was Received'},
+            {name: 's3', value: 'Correspondence Was Received And USCIS Is Reviewing It'},
+            {name: 's4', value: 'Decision Notice Mailed'}, // end1
+            {name: 's5', value: 'New Card Is Being Produced'},
+            {name: 's6', value: 'Card Was Mailed To Me'},
+            {name: 's7', value: 'Card Was Picked Up By The United States Postal Service'},
+            {name: 's8', value: 'Card Is Being Returned to USCIS by Post Office'},
+            {name: 's9', value: 'Card Was Returned To USCIS'},
+            {name: 's10', value: 'Card Was Delivered To Me By The Post Office'}, // end2
+            {name: 's11', value: 'Card Was Determined As Undeliverable By The Post Office'}, // end3
+            {name: 'end', value: 'Dummy End'},
         ]
         const LINES = [
-            ['a', 'b'], ['b', 'c'], ['c', 'end'], ['a', 'd'], ['d', 'e'], ['e', 'f'], ['f', 'g'], ['g', 'end'], ['f', 'h'],
-            ['h', 'end'], ['d', 'i'], ['i', 'j'], ['j', 'k'], ['k', 'end'], ['i', 'l'], ['l', 'm'], ['m', 'end'],
-            ['d', 'n'], ['n', 'o'], ['o', 'p'], ['p', 'q'], ['q', 'r'], ['r', 'end'], ['p', 's'], ['s', 't'],
-            ['t', 'end'], ['a', 'u'], ['u', 'v'], ['v', 'w'], ['w', 'x'], ['x', 'end'], ['v', 'y'], ['y', 'z'], ['z', 'end']
+            ['start', 's1', '73.5 days'], ['s1', 's2', '20 days'], ['s2', 's3', '7 days'], ['s3', 's4', '12 days'], ['s3', 's5', '40.1 days'], ['start', 's5', '70.4 days'], ['s5', 's6', '3.1 days'], ['s6', 's11', '2.5 days'], ['s6', 's7', '1 days'], ['s7', 's10', '5 days'], ['s7', 's8', '35 days'], ['s8', 's9', '8 days'], ['s9', 's6', '25.8 days'], ['s4', 'end'], ['s10', 'end'], ['s11', 'end']
         ];
-        const START_NODE = 'a';
+
+        const START_NODE = 'start';
         const END_NODE = 'end';
 
         function getNodeKey(node) {
@@ -199,7 +183,11 @@
                 nodeGraph[nodeKey] = [];
             }
             for (let line of LINES) {
-                nodeGraph[line[0]].push(line[1]);
+                if (line[0] === START_NODE || line[1] === END_NODE || parseInt(line[0].substring(1)) < parseInt(line[1].substring(1))) {
+                    nodeGraph[line[0]].push(line[1]);
+                } else {
+                    nodeGraph[line[0]].push(END_NODE);
+                }
             }
             for (let key of Object.keys(NODE_KEY_MAP)) {
                 getNodeDepth(key, nodeGraph, nodeDepth);
@@ -218,15 +206,24 @@
                     y: realHeight[key] * 60,
                     value: getNodeValue(nd),
                 };
-                nodes.push(node);
+                if (node.name !== END_NODE) {
+                    nodes.push(node);   
+                }
             }
             for (let i = 0; i < LINES.length; i++) {
                 let line = {
-                    'source': LINES[i][0],
-                    'target': LINES[i][1],
-                    'value': 1,
+                    source: LINES[i][0],
+                    target: LINES[i][1],
+                    value: LINES[i][2],
                 };
-                links.push(line);
+                if (line.source !== START_NODE && line.target !== END_NODE && parseInt(line.source.substring(1)) > parseInt(line.target.substring(1))) {
+                    line['lineStyle'] = {
+                            curveness: 0.5,
+                        }
+                }
+                if (line.target !== END_NODE) {
+                    links.push(line);
+                }
             }
             return {
                 links: links,
@@ -243,29 +240,46 @@
 
         function drawGraph(graph) {
             var option = {
+                tooltip: {},
                 series: [
                     {
                         type: 'graph',
                         layout: 'none',
-                        symbolSize: 30,
-                        edgeSymbol: ['none', 'arrow'],
+                        symbolSize: 25,
+                        edgeSymbol: ['circle', 'arrow'],
+                        edgeSymbolSize: [4, 10],
+                        edgeLabel: {
+                            normal: {
+                                textStyle: {
+                                    fontSize: 20
+                                }
+                            }
+                        },
                         data: graph.data,
                         links: graph.links,
-                        roam: true,
                         label: {
                             normal: {
-                                show: true,
+                                show: false,
+                                position: 'top',
+                                fontSize: 25,
                                 formatter: function (e) {
                                     return e['data']['value'];
                                 }
                             }
                         },
                         lineStyle: {
-                            color: 'target',
+                            // color: 'target',
+                            normal: {
+                                opacity: 0.9,
+                                width: 2,
+                                curveness: 0.1,
+                                show: true,
+                            }
                         },
                         edgeLabel: {
                             normal: {
-                                show: false,
+                                show: true,
+                                formatter: '{c}',
                             }
                         },
                         tooltip: {
